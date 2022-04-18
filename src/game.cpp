@@ -2,11 +2,17 @@
 #include <iostream>
 #include "SDL.h"
 
+
 Game::Game(std::size_t grid_width, std::size_t grid_height)
     : snake(grid_width, grid_height),
+      _grid_width{grid_width},
+      _grid_height{grid_height},
       engine(dev()),
       random_w(0, static_cast<int>(grid_width - 1)),
-      random_h(0, static_cast<int>(grid_height - 1)) {
+      random_h(0, static_cast<int>(grid_height - 1)),
+      random_obst_dir(0,static_cast<int>(7))
+{
+  PlaceObstacles(3);
   PlaceFood();
 }
 
@@ -25,7 +31,7 @@ void Game::Run(Controller const &controller, Renderer &renderer,
     // Input, Update, Render - the main game loop.
     controller.HandleInput(running, snake);
     Update();
-    renderer.Render(snake, food);
+    renderer.Render(snake, food, obstacles);
 
     frame_end = SDL_GetTicks();
 
@@ -58,9 +64,37 @@ void Game::PlaceFood() {
     // Check that the location is not occupied by a snake item before placing
     // food.
     if (!snake.SnakeCell(x, y)) {
+      bool is_obstacle_location = false;
+      for (const Obstacle& obstacle : obstacles )
+      {
+        if (x == obstacle.get_x() && y == obstacle.get_y())
+          is_obstacle_location = true;
+      }
+      if(is_obstacle_location)
+        continue;
+
       food.x = x;
       food.y = y;
       return;
+    }
+  }
+}
+
+void Game::PlaceObstacles (int n) {
+  for (int i = 0; i < n ; ++i) {
+    int x,y;
+    while (true) {
+      x = random_w(engine);
+      y = random_h(engine);
+
+      // Check that the location is not occupied by a snake item before placing obstacle.
+      if (!snake.SnakeCell(x, y)) {
+        int obst_dir = random_obst_dir(engine);
+        std::cout << "Obstacle " << i << ": X= " << x << "   Y= " << y << "   Dir: " << obst_dir << std::endl; 
+        obstacles.emplace_back(x,y, _grid_width, _grid_height, obst_dir);
+        break;
+      }
+    
     }
   }
 }
@@ -73,6 +107,17 @@ void Game::Update() {
   int new_x = static_cast<int>(snake.head_x);
   int new_y = static_cast<int>(snake.head_y);
 
+  bool is_obstacle_location = false;
+  for (const Obstacle& obstacle : obstacles)
+  {
+     if (new_x == obstacle.get_x() && new_y == obstacle.get_y())
+       is_obstacle_location = true;
+  }
+  if (is_obstacle_location)
+  {
+    snake.alive = false;
+    return;
+  }
   // Check if there's food over here
   if (food.x == new_x && food.y == new_y) {
     score++;
@@ -80,6 +125,10 @@ void Game::Update() {
     // Grow snake and increase speed.
     snake.GrowBody();
     snake.speed += 0.02;
+  }
+  for (Obstacle& obstacle : obstacles)
+  {
+      obstacle.update();
   }
 }
 
